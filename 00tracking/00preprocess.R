@@ -29,8 +29,7 @@ registerDoParallel(cl)
 
 # input file with batch data
 file <- here::here("000inputOutput/00input/datos_calderones_todos_MOD.csv") # Tag_Gm_delpoint.csv only has the start of the trip until there is a big gap (>48)
-
-file <- read.csv(file)
+df <- read.csv(file)
 
 # output directory
 outdir <- here::here("000inputOutput/00output/00tracking/L0_locations")
@@ -41,25 +40,16 @@ if (!dir.exists(outdir)) dir.create(outdir, recursive = TRUE)
 # 2. Process metadata
 #---------------------------------------------------------------
 
-# import data
-df <- read_agazella(file)  # takes time
-
-
-$date <- as.character(df$date)
-file$date <- as.POSIXct(file$date, format = "%Y-%m-%d %H:%M:%S")
-
 
 df$date <- as.POSIXct(df$date, format = "%Y-%m-%d %H:%M:%S")
-library(lubridate)
-C <- parse_date_time(df$date, orders = c("ymd HMS", "dmy HMS", "ymd HM", "dmy HM"))
-
-
-str(df)
+df <- dplyr::select(df, IF = DeployID, Tag_ID = Ptt, Tag_type = Instr, date = Date, lon = Longitude, lat = Latitude, lc = Quality)
+df <- dplyr::select(df, DeployID = id, Ptt = Tag_ID, Instr = Tag_type, Date = date, Longitude = lon, Latitude = lat, Quality = lc)
 
 
 # summarize data per id
-db <- summarizeId(df)
-db
+df <- dplyr::select(df, deployid = DeployID, ptt = PTT, date = Date, lon = Longitude, lat = Latitude, lc = Quality)
+
+df <- dplyr::select(df,  DeployID = deployid, PTT = ptt, Date = date, Longitude = longitude, Latitude = latitude, Quality = lc)
 
 
 #---------------------------------------------------------------
