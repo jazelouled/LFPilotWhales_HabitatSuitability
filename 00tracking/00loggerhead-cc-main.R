@@ -16,17 +16,17 @@ aaa
 #---------------------------------------------------------------
 # 1. Set parameters
 #---------------------------------------------------------------
-sp_code <- "LHT"  # species code
-tag_type <- "GPS"
+sp_code <- "LFPW"  # species code
+tag_type <- "PTT"
 
 # Trip definition
 trip_type <- "time"  # haul: trim track by haul-out locations; time: trim track by time gaps
 trip_time_gap <- 7 * 24  # (used if trip_type == time) Tracks with data gaps in excess of [seg_time_gap] hours were broken up for separate modeling
-trip_time_gap <- 200 * 24  # (used if trip_type == time) Tracks with data gaps in excess of [seg_time_gap] hours were broken up for separate modeling
+# trip_time_gap <- 200 * 24  # (used if trip_type == time) Tracks with data gaps in excess of [seg_time_gap] hours were broken up for separate modeling
 
 # Track selection
 sel_min_loc <- 10  # minimum number of locations
-sel_min_dur <- 12 # minimum durantion of track, in hours
+sel_min_dur <- 12 # minimum duration of track, in hours
 sel_exclude <- NULL # custom selection of tags based on exploration of data
 sel_min_dist <- 15 # minimum distance of tracks, in km
 
@@ -58,10 +58,11 @@ sim_by_trip <- FALSE  # generate simulation by trip rather than full track
 
 
 # Extract environment
-# env_buffer <- 15000  # radius of buffer to average environmental data around each location, in meters. (15000)
-env_buffer <- 100000  # radius of buffer to average environmental data around each location, in meters. (100000)
-all_vars <- c("BAT", "SLP", "SDIST", "SST", "SSTg", "SAL", "SALg", "SSH", "EKE", "CHL", "SIC", "SIT", "MLD", "EDGE", "D2COL")
-env_max_date <- as.Date("2019-09-16")
+env_buffer <- 15000  # radius of buffer to average environmental data around each location, in meters. (15000)
+# env_buffer <- 100000  # radius of buffer to average environmental data around each location, in meters. (100000)
+# all_vars <- c("BAT", "SLP", "SDIST", "SST", "SSTg", "SAL", "SALg", "SSH", "EKE", "CHL", "SIC", "SIT", "MLD", "EDGE", "D2COL")
+# env_max_date <- as.Date("2019-09-16")
+all_vars <- c("BAT", "SLP", "SDIST", "SST", "CHL")
 
 
 #---------------------------------------------------------------
@@ -82,12 +83,16 @@ source("scr/fun_survey.R")
 #---------------------------------------------------------------
 
 # Set number of cores for parallel processing
-cores <- 10#detectCores()-2
+cores <- 10
+
+#detectCores()-2
 
 # Step 1. Pre-process data and standardize data
 # Transforms different data sources into a common format
 # Output data can be found: main_dir/output/species/sp_code/L0_locations
 source("analysis/tracking/scr/preproc_GAZ.R")
+
+
 
 # Step 2. Filter location data
 # Filtering is based on selected parameters from above

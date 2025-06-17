@@ -21,36 +21,9 @@ read_agazella <- function(file){
   library(openxlsx)
   library(data.table)
   
-  # custom function embeded
-  xls2degrees <- function(x){
-    # Manipulating data in Excel can generate problems in coordinates because of changes of the
-    # regional system.
-    # This function fixes this issue. But assumes that coordinates are XX.XXXX
-    
-    library(stringr)
-    
-    
-    lon_length <- str_length(x)  # get the length of the string
-    lon_num <- as.numeric(x)  # convert the string to a number
-    dec <- str_detect(x, pattern = "\\.", negate = FALSE)  # identify if there is a decimal separator
-    minus <- str_detect(x, pattern = "-", negate = FALSE)  # identify if there is a negative coordinate
-    decimals <- ifelse(minus == "TRUE", lon_length-3, lon_length-2)  # define number of decimals
-    lon <- ifelse(dec == "TRUE", lon_num, lon_num/10^(decimals))
-    
-    return(lon)
-  }
-  
-  # 1. Get the list of all sheets 
-  sheet_names <- getSheetNames(file)
-  
-  
-  # 2. Loop to process each sheet and combine with the others
-  data_list <- list()
-  
-  for (i in 1:length(sheet_names)){
-    print(i)
-    # import data
-    df <- read.xlsx(xlsxFile = file, sheet = i, detectDates = F)
+
+
+    df <- read.csv(file)
     
     # process date time
     # if (unique(df$sex) == "males") {
@@ -65,7 +38,7 @@ read_agazella <- function(file){
     
     options(digits=20)
     # df$date <- paste(df$UTC_Date, df$UTC_Time)
-    df$Date <- as.POSIXct(df$Date, format = "%d/%m/%Y %H:%M")
+    df$date <- as.POSIXct(df$date, format = "%d-%m-%Y %H:%M:%S")
     df <- df[!is.na(df$Date),]
 
     # } 
