@@ -62,7 +62,7 @@ map_argos <- function (data){
   library(ggplot2)
   # source("R/config.R")  # set your Google Drive data folder here
   # source("R/database_tools.R")
-  
+  data$sp_code <- "GMEL"
   # Import world map
   data(countriesHigh, package = "rworldxtra", envir = environment())
   wm <- suppressMessages(fortify(countriesHigh))
@@ -78,17 +78,17 @@ map_argos <- function (data){
   
   ### Plot
   p <- ggplot() +
-    geom_polygon(data = wm, aes_string(x = "long", y = "lat", group = "group"),
-                 fill = grey(0.3)) +
+    # geom_polygon(data = wm, aes_string(x = "long", y = "lat", group = "group"),
+    #              fill = grey(0.3)) +
     coord_quickmap(xlim = xl, ylim = yl, expand = TRUE) +
     xlab("Longitude") +
     ylab("Latitude") +
     geom_point(data = data,
-               aes_string(x = "lon", y = "lat", group = NULL, colour = "lc"),
+               aes_string(x = "lon", y = "lat", group = NULL, colour = "Quality"),
                size = 2) +
     geom_path(data = data,
               aes_string(x = "lon", y = "lat", group = NULL)) +
-    labs(title = paste(data$sp_code[1], "Id:", data$id[1]),
+    labs(title = paste(data$sp_code[1], "Id:", data$DeployID[1]),
          subtitle = paste("Start:", sdate, "End:", edate, "(", days, "days)")) 
   
   
