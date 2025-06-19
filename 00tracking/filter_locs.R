@@ -20,8 +20,8 @@ cores <- 2
 # 1. Set data repository
 #---------------------------------------------------------------
 here()
-indir <- here::here("00output/tracking/GMEL/L0_locations")
-outdir <- here::here("00output/tracking/GMEL/L1_locations")
+indir <- here::here("000inputOutput/00output/00tracking/L0_locations")
+outdir <- here::here("000inputOutput/00output/00tracking/L1_locations")
 if (!dir.exists(outdir)) dir.create(outdir, recursive = TRUE)
 
 
@@ -32,7 +32,7 @@ if (!dir.exists(outdir)) dir.create(outdir, recursive = TRUE)
 # import all location files
 loc_files <- list.files(indir, full.names = TRUE, pattern = "L0_locations.csv")
 df <- readTrack(loc_files)
-df$date <- as.POSIXct(df$date, format = "%Y-%m-%d %H:%M")
+df$Date <- as.POSIXct(df$Date, format = "%Y-%m-%d %H:%M:%S")
 str(df)
 # summarize data per trip
 trips <- summarizeTrips(df)
@@ -42,9 +42,29 @@ trips <- filter(trips,
              duration_h >= sel_min_dur,
              n_loc >= sel_min_loc,
              distance_km >= sel_min_dist, 
-             !id %in% sel_exclude)
+             !PTT %in% sel_exclude)
 
-tags <- unique(trips$id)
+sdata <- filter(sdata, lc != "Z")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+tags <- unique(trips$PTT)
 
 #---------------------------------------------------------------
 # 3. Filter data for each track and trip
@@ -60,7 +80,8 @@ tags <- unique(trips$id)
   data$date <- as.POSIXct(data$date, format = "%d/%m/%Y %H:%M")
 
   # get list of trips to process
-  trip_list <- unique(data$trip)
+  trip_list <- unique(df$PTT)
+  
 # 
   data_list <- list()
 
@@ -99,16 +120,16 @@ tags <- unique(trips$id)
     # }
 #
 #     # Filter points on land
-#     if(filt_land == TRUE){
-#       sdata$onland <- point_on_land(lat = sdata$lat, lon = sdata$lon, land = land)
-#       sdata <- filter(sdata, onland == FALSE)
-#     }
+    if(filt_land == TRUE){
+      sdata$onland <- point_on_land(lat = sdata$lat, lon = sdata$lon, land = land)
+      sdata <- filter(sdata, onland == FALSE)
+    }
     
     # append to list
       
-    drop <- c("group", "smaj", "smin", "eor")
+    # drop <- c("group", "smaj", "smin", "eor")
     
-    sdata <- sdata[,!(names(sdata) %in% drop)]
+    # sdata <- sdata[,!(names(sdata) %in% drop)]
       
       
       
@@ -181,3 +202,81 @@ out_file <- paste0(outdir, "/", sp_code, "_summary_id.csv")
 write.csv(idstats, out_file, row.names = FALSE)
 
 print("Filtering ready")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+data_list <- list()
+
+# filter by speed and near-duplicates at trip level
+for (j in 1:length(trip_list)) {
+  
+  # subset data
+  jtrip <- trip_list[j]
+  sdata <- subset(df, PTT == jtrip)
+  
+  # Filter out Z location classes
+  sdata <- filter(sdata, Quality != "Z")
+  
+  # Remove near-duplicate positions
+  sdata <- filter_dup(sdata, step.time = filt_step_time, step.dist = filt_step_dist)
+  
+  # Filter positions by speed and angle for PTT
+  sdata$argosfilter <- sdafilter(
+    lat = sdata$Latitude,
+    lon = sdata$Longitude,
+    dtime = sdata$Date,
+    lc = sdata$Quality,
+    vmax = filt_vmax,      # in m/s
+    ang = filt_ang,        # No spikes are removed if ang = -1
+    distlim = filt_distlim
+  )
+  sdata <- filter(sdata, argosfilter == "not")
+  
+  if(filt_land == TRUE){
+    sdata$onland <- point_on_land(lat = sdata$lat, lon = sdata$lon, land = land)
+    sdata <- filter(sdata, onland == FALSE)
+  }
+  
+  
+  
+  # Drop unused columns
+  drop <- c("group", "smaj", "smin", "eor")
+  sdata <- sdata[, !(names(sdata) %in% drop)]
+  
+  # Combine data from multiple trips
+  dataL1 <- rbindlist(data_list)
+  
+  # Store track data into individual folder at output path
+  out_file <- paste0(outdir, "/", j, "_L1_locations.csv")
+  write.csv(sdata, out_file, row.names = FALSE)
+  
+  # Plot track
+  p1 <- mapL1(sdata)
+  
+  # Plot histogram
+  p2 <- diffTimeHisto(sdata, vline = 2)
+  
+  # Combine plots
+  lay <- rbind(
+    c(1, 1),
+    c(1, 1),
+    c(2, 2)
+  )
+  
+  p <- grid.arrange(p1, p2, layout_matrix = lay)
+  
+  # Export multi-panel plot
+  out_file <- paste0(outdir, "/", j, "_L1_locations.png")
+  ggsave(out_file, p, width = 30, height = 15, units = "cm")
+}

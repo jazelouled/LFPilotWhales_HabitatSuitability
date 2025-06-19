@@ -36,10 +36,51 @@ bathy <- (here::here("00output/caret/00enviro/00terrain/derived_bathy.tif"))
 bathy_nc <- paste0(output_data, "/terrain/derived_bathy.nc")
 bathy <- raster(bathy)
 
+
+bathy <- "/Users/jazelouled-cheikhbonan/Dropbox/2023_LoggerheadWestAfrica_cc/Loggerhead_Rproject/00output/caret/00enviro/00terrain/derived_bathy.tif"
+bathy_nc <- paste0(output_data, "/terrain/derived_bathy.nc")
+bathy <- raster(bathy)
+
+
+library(raster)
+
+# Load bathymetry
+bathymetry <- "~/Dropbox/2022_SouthHemisphere_SDM/bathymetry/"
+bathy <- raster(paste0(bathymetry, "/GEBCO_2014_2D.nc"))
+
+# Define extent for Western Mediterranean + Portugal
+# Approximate bounding box: longitude from -11 to 15, latitude from 30 to 46
+bathy_crop <- crop(bathy, extent(-30, 15, 15, 48))
+
+# Set land (elevation > 0) to NA
+bathy_crop[bathy_crop > 0] <- NA
+
+# Optional: visualize result
+plot(bathy_crop, main = "Cropped Bathymetry - Western Mediterranean & Portugal")
+
+
+
+
+
 # Import L2 product of simulations (i.e. simulations with environmental data)
 indir <- here::here(paste0(output_data, "/caret/01tracking/01filteringForagingUpwelling/00L2_loc_cut/cutTracks"), modelSet, "cutTripsFinal/")
 loc_files <- list.files(indir, full.names = TRUE, pattern = "cutTrack.csv")
 ssm <- readTrack(loc_files)
+
+
+indir <- here::here(paste0(output_data, "/caret/01tracking/01filteringForagingUpwelling/00L2_loc_cut/cutTracks"), modelSet, "cutTripsFinal/")
+loc_files <- list.files(indir, full.names = TRUE, pattern = "cutTrack.csv")
+ssm <- readTrack(loc_files)
+
+indir <- here::here("000inputOutput/00output/00tracking/L0_locations")
+loc_files <- list.files(indir, full.names = TRUE, pattern = "locations.csv")
+ssm <- readTrack(loc_files)
+
+
+
+
+
+
 
 
 
@@ -47,13 +88,13 @@ ssm <- readTrack(loc_files)
 
 # Create a minimum convex polygon using all tracks to delimit
 ssm$sID <- 1  # create a single ID for all tracks
-ssm <- dplyr::select(ssm, sID, lon, lat)
+ssm <- dplyr::select(ssm, sID, Longitude, Latitude)
 
 bbox <-ssm %>% 
-  st_as_sf(coords = c("lon","lat"), crs = 4326) %>% 
+  st_as_sf(coords = c("Longitude","Latitude"), crs = 4326) %>% 
   st_bbox()
 
-coordinates(ssm) <- ~ lon + lat
+coordinates(ssm) <- ~ Longitude + Latitude
 proj4string(ssm) <- "+proj=longlat +ellps=WGS84"
 mcpolygon <- mcp(ssm, percent = 100) # MCP use all the positions
 
@@ -67,11 +108,11 @@ plot(mcpolygon_buf)
 
 # Reclassify bathymetry to create ocean mask
 # Define resistance values (0 = ocean, 1 = land)
-bathy[!is.na(bathy)] <- 0
-bathy[is.na(bathy)] <- 1
+bathy_crop[!is.na(bathy_crop)] <- 0
+bathy_crop[is.na(bathy_crop)] <- 1
 
 # Mask with MCP extent
-oceanmask <- mask(bathy, mcpolygon_buf)
+oceanmask <- mask(bathy_crop, mcpolygon_buf)
 
 # downsize
 oceanmask <- aggregate(oceanmask, fact = 5, fun = median)
