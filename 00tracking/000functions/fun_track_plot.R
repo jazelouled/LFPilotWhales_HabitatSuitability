@@ -78,8 +78,8 @@ map_argos <- function (data){
   
   ### Plot
   p <- ggplot() +
-    # geom_polygon(data = wm, aes_string(x = "long", y = "lat", group = "group"),
-    #              fill = grey(0.3)) +
+    geom_polygon(data = wm, aes_string(x = "long", y = "lat", group = "group"),
+                 fill = grey(0.3)) +
     coord_quickmap(xlim = xl, ylim = yl, expand = TRUE) +
     xlab("Longitude") +
     ylab("Latitude") +
