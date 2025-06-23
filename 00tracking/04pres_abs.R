@@ -6,16 +6,6 @@
 # 3. Get cell (i) and day (j) for observed tracks. Removed duplicates: considers temporal and spatial autocorrelation of tracking data.
 # Note individual variability is not considered in this study.
 # 4. Remove pseudo-absences that overlap in time and space with observations.
-
-
-aa <- read.csv(here::here("00output/caret/01tracking/01filteringForagingUpwelling/00L2_loc_cut/cutTracks/neritic/03PresAbs_1monthThreshold/L2_PresAbsNeritic_1monthThreshold.csv"))
-pres_aa <- aa %>% filter(occ == 1)
-abs_aa <- aa %>% filter(occ == 0)
-
-plot(abs_aa$lon, abs_aa$lat)
-points(pres_aa$lon, pres_aa$lat, col="red")
-
-
  
 library(dplyr)
 library(raster)
@@ -26,39 +16,11 @@ library(doParallel)
 #---------------------------------------------------------------
 # 1. Set data repository
 #---------------------------------------------------------------
-
-ssm_data <- paste0(output_data, "/tracking/AGAZ", "/L2_locations")
-sim_data <- paste0(output_data, "/tracking/AGAZ", "/L2_simulations")
-sim_data <- paste0(output_data, "/tracking/AGAZ", "/L2_simulations_FScpf")
-
-
-ssm_data <- here::here("00output/caret/01tracking/01filteringForagingUpwelling/00L2_loc_cut/cutTracks/neritic/01cutTripsFinal/")
-sim_data <- here::here("00output/caret/01tracking/01filteringForagingUpwelling/00L2_loc_cut/cutTracks/neritic/02L2_simulations/")
-outdir <- here::here("00output/caret/01tracking/01filteringForagingUpwelling/00L2_loc_cut/cutTracks/neritic/03PresAbs")
+ssm_data <- here::here("000inputOutput/00output/00tracking/L2_locations")
+sim_data <- here::here("000inputOutput/00output/00tracking/simulations")
+outdir <- here::here("000inputOutput/00output/00tracking/03PresAbs")
 if (!dir.exists(outdir)) dir.create(outdir, recursive = TRUE)
 
-
-
-ssm_data <- here::here("00output/caret/01tracking/01filteringForagingUpwelling/00L2_loc_cut/cutTracks/neritic/01cutTripsFinal/")
-sim_data <- here::here("00output/caret/01tracking/01filteringForagingUpwelling/00L2_loc_cut/cutTracks/neritic/02L2_simulations/")
-outdir <- here::here("00output/caret/01tracking/01filteringForagingUpwelling/00L2_loc_cut/cutTracks/neritic/03PresAbs_1monthThreshold")
-if (!dir.exists(outdir)) dir.create(outdir, recursive = TRUE)
-
-
-
-ssm_data <- here::here("00output/caret/01tracking/01filteringForagingUpwelling/00L2_loc_cut/cutTracks/oceanic/01cutTripsFinal/")
-sim_data <- here::here("00output/caret/01tracking/01filteringForagingUpwelling/00L2_loc_cut/cutTracks/oceanic/02L2_simulations/")
-outdir <- here::here("00output/caret/01tracking/01filteringForagingUpwelling/00L2_loc_cut/cutTracks/oceanic/03PresAbs_1monthThreshold")
-if (!dir.exists(outdir)) dir.create(outdir, recursive = TRUE)
-
- 
-ssm_data <- here::here("00output/caret/01tracking/01filteringForagingUpwelling/00L2_loc_cut/cutTracks/oceanic/01cutTripsFinal/")
-sim_data <- here::here("00output/caret/01tracking/01filteringForagingUpwelling/00L2_loc_cut/cutTracks/oceanic/02L2_simulations/")
-outdir <- here::here("00output/caret/01tracking/01filteringForagingUpwelling/00L2_loc_cut/cutTracks/oceanic/03PresAbs_2monthThreshold")
-if (!dir.exists(outdir)) dir.create(outdir, recursive = TRUE)
-
- 
-sim_n <- 50
 #---------------------------------------------------------------
 # 2. Import presence and absences
 #---------------------------------------------------------------
@@ -67,32 +29,15 @@ sim_n <- 50
 # 77856 to 59326 cell absences when doing it by tripID
 
 # Presence data (observed state-space models)
-loc_files <- list.files(ssm_data, full.names = TRUE, pattern="cutTrack.csv")
-
+loc_files <- list.files(ssm_data, full.names = TRUE, pattern="L2_locations.csv")
 pres <- readTrack(loc_files)
-
-pres <- pres %>%
-  dplyr::mutate(dateTime = ifelse(grepl("/", timestamp), dmy_hm(timestamp), ymd_hms(timestamp)))
-
-pres$dateTime <- as.POSIXct(pres$dateTime, origin = "1970-01-01", tz = "UTC")
-pres$date <- as.Date(pres$dateTime)
+pres$dateTime <- as.POSIXct(pres$date, format = "%Y-%m-%d %H:%M:%S")
 
 
 # Absence data (simulations)
-loc_files <- list.files(sim_data, full.names = TRUE, pattern=".csv")
+loc_files <- list.files(sim_data, full.names = TRUE, pattern="L2_locations.csv")
 abs <- readTrack(loc_files)
-
-abs <- abs %>%
-  dplyr::mutate(dateTime = ifelse(grepl("/", timestamp), dmy_hm(timestamp), ymd_hms(timestamp)))
-
-abs$dateTime <- as.POSIXct(abs$dateTime, origin = "1970-01-01", tz = "UTC")
-abs$date <- as.Date(abs$dateTime)
-
-
-
-
-# Filter data by number of simulations
-abs <- dplyr::filter(abs, nsim <= sim_n)
+abs$dateTime <- as.POSIXct(abs$date, format = "%Y-%m-%d %H:%M:%S")
 
 
 #---------------------------------------------------------------
@@ -110,7 +55,7 @@ ymax <- ceiling(max(max(pres$lat), max(abs$lat)))
 ext <- extent(xmin, xmax, ymin, ymax)
 
 #create grid
-res <- 0.25
+res <- 0.083
 grid <- raster(ext, res = res, crs = crs("+proj=longlat +datum=WGS84"))
 
 
@@ -123,28 +68,11 @@ pres$cell <- cellFromXY(grid, cbind(pres$lon, pres$lat))
 
 # Transform observation to presence by cell and date
 cpres <- pres %>%
-  dplyr::group_by(organismID, tripID, cell, date) %>%
+  dplyr::group_by(id, cell, date) %>%
   dplyr::summarize(occ = 1,
             n = dplyr::n())
 
-colnames(cpres)[colnames(cpres) == 'tripID'] <- 'trip'
-
-
-# Define the trips to be excluded
-trips_to_exclude <- c("CARCAR_60523b_CEAMAR_003", "CARCAR_60523b_CEAMAR_004", "CARCAR_60523b_CEAMAR_006")
-
-
-
-
-# Filter out the specified trips
-cpres <- cpres %>% 
-  filter(!trip %in% trips_to_exclude)
-
-# mixind <- pres %>% filter(pres$deploymentID == "CARCAR_60523b_CEAMAR_20060513")
-# mixind <- pres %>% filter(pres$tripID == "CARCAR_60523b_CEAMAR_001")
-# plot(mixind$lon, mixind$lat)
-
-
+colnames(cpres)[colnames(cpres) == 'id'] <- 'trip'
 
 # Get raster coordinates
 xy <- xyFromCell(grid, cpres$cell)
@@ -160,7 +88,6 @@ cpres$lat <- xy[,"y"]
 abs$cell <- cellFromXY(grid, cbind(abs$lon, abs$lat))
 
 # Transform observation to absence by cell and date
-
 abs <- abs %>%
   mutate(organismID = sub("_[^_]+$", "", trip))
 
@@ -203,14 +130,21 @@ registerDoParallel(cl)
 #create empty list
 cabs_list <- list()
 
-temporal_thrs <- 31 # sequential processing for each tag
+temporal_thrs <- 2 # sequential processing for each tag
+ 
+
+
+cpres$date <- as.POSIXct(cpres$date, format = "%Y-%m-%d %H:%M:%S")
+cabs$date <- as.POSIXct(cabs$date, format = "%Y-%m-%d %H:%M:%S")
+
+
 
 for(j in 1:length(id_list)){
   
   print(paste("Processing tag", j, "from", length(id_list)))
   
   # selected absences for a given animal id
-  jcabs <- dplyr::filter(cabs, organismID == id_list[j])
+  jcabs <- dplyr::filter(cabs, trip == id_list[j])
   
   # for each absence, check if there is a presence in adjacent cells within the temporal period defined
   # if there is a match, remove absence. if not, keep it.
@@ -231,6 +165,8 @@ for(j in 1:length(id_list)){
 
 #combine absences
 cabs_all <- rbindlist(cabs_list)
+cabs_all <- cabs_all %>% dplyr::select(-organismID)
+
 
 # Stop cluster
 parallel::stopCluster(cl)
@@ -244,45 +180,10 @@ parallel::stopCluster(cl)
 
 # combine presence and absence into a single data.frame and save
 comb <- rbind(data.frame(cpres), data.frame(cabs_all))
-comb$sp_code <- sp_code
 comb <- dplyr::select(comb, organismID, trip, cell, lon, lat, date, occ)
 
 # export to species folder
-outfile <- here::here("00output/caret/01tracking/01filteringForagingUpwelling/00L2_loc_cut/cutTracks/neritic/03PresAbs/L2_PresAbsNeritic.csv")
+outfile <- here::here("000inputOutput/00output/00tracking/03PresAbs/presAbsCells.csv")
 write.csv(comb, outfile, row.names = FALSE)
-
-outfile <- here::here("00output/caret/01tracking/01filteringForagingUpwelling/00L2_loc_cut/cutTracks/oceanic/03PresAbs/L2_PresAbsOceanic.csv")
-write.csv(comb, outfile, row.names = FALSE)
-
-outfile <- here::here("00output/caret/01tracking/01filteringForagingUpwelling/00L2_loc_cut/cutTracks/oceanic/03PresAbs_1monthThreshold/L2_PresAbsOceanic_1monthThreshold.csv")
-write.csv(comb, outfile, row.names = FALSE)
-
-outfile <- here::here("00output/caret/01tracking/01filteringForagingUpwelling/00L2_loc_cut/cutTracks/oceanic/03PresAbs_2monthThreshold/L2_PresAbsOceanic.csv")
-write.csv(comb, outfile, row.names = FALSE)
-
-outfile <- here::here("00output/caret/01tracking/01filteringForagingUpwelling/00L2_loc_cut/cutTracks/neritic/03PresAbs_1monthThreshold/L2_PresAbsNeritic_1monthThreshold.csv")
-write.csv(comb, outfile, row.names = FALSE)
-
-
-
-# ff <- read.csv("/Users/jazelouled-cheikhbonan/Dropbox/2023_LoggerheadWestAfrica_cc/Loggerhead_Rproject/00output/caret/01tracking/01filteringForagingUpwelling/00L2_loc_cut/cutTracks/neritic/03PresAbs/L2_PresAbsNeritic.csv")
-# fff <- subset(ff, ff$date == "2011-11-30")
-# plot(ff$occ)
-# 
-# library(ggplot2)
-# 
-# # Assuming 'df' is your data frame
-# ggplot(fff, aes(x = lon, y = lat, color = factor(occ))) +
-#   geom_point() +
-#   scale_color_manual(values = c("blue", "red"), labels = c("Absence", "Presence")) +
-#   labs(title = "Presence and Absence Data",
-#        x = "Longitude",
-#        y = "Latitude",
-#        color = "Occurrence") +
-#   theme_minimal()
-
-
-
-
 
 

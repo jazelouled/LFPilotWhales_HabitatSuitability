@@ -82,18 +82,37 @@ filter_dup  <- function (data, step.time = 2/60, step.dist = 0.001){
   ## Keep original number of locations
   loc0 <- nrow(data)
   
-  ## Convert standard format to SDLfilter
   
-  # Standardize Location clasess
-  data$lc <- as.character(data$Quality)
-  data$lc[data$Quality == "A"] <- -1 
-  data$lc[data$Quality == "B"] <- -2
-  data$lc[data$Quality == "Z"] <- -9
-  data$lc[data$Quality == "G"] <- 4
-  data$lc <- as.numeric(data$lc)
+  
+  if (any(data$PTT %like% "Murcia")) {
+    # "Murcia" case: Quality column doesn't exist or is all NA, so just use lc as is
+    data$lc <- 1  # ensure lc is numeric
+    data$id <- as.character(data$PTT)
+    
+  } else {
+    # All other cases: standard Quality-based transformation
+    data$lc <- as.character(data$Quality)
+    
+    data$lc[data$Quality == "A"] <- -1 
+    data$lc[data$Quality == "B"] <- -2
+    data$lc[data$Quality == "Z"] <- -9
+    data$lc[data$Quality == "G"] <- 4
+    
+    data$lc <- as.numeric(data$lc)
+    data$id <- as.numeric(data$PTT)
+    
+  }
+  
+
+  
   data$lon <- as.numeric(data$Longitude)
   data$lat <- as.numeric(data$Latitude)
-  data$id <- as.numeric(data$PTT)
+  
+  
+  
+  
+  
+  
   
   
   # Rename columns
@@ -160,7 +179,8 @@ mapL1 <- function (data){
   data$time <- as.integer(data$Date)
   
   ### Filter location data
-  data <- filter(data, argosfilter == "not" & onland == "FALSE")
+  # data <- filter(data, argosfilter == "not" & onland == "FALSE")
+  data <- filter(data, onland == "FALSE")
   
   ### Get metadata
   sdate <- data$Date[1]
@@ -184,13 +204,13 @@ mapL1 <- function (data){
                aes_string(x = "lon", y = "lat", group = NULL, colour = "time"),
                size = 2) +
     #scale_colour_gradientn(colours = terrain.colors(10)) + 
-    # scale_colour_gradientn(colours=rev(brewer.pal(10,"RdYlGn")),
-    #                        breaks=b,labels=format(blab)) +
-    #scale_colour_brewer() +
+    scale_colour_gradientn(colours=rev(brewer.pal(10,"RdYlGn")),
+                           breaks=b,labels=format(blab)) +
     geom_path(data = data,
               aes_string(x = "lon", y = "lat", group = "id")) +
     labs(title = paste(data$sp_code[1], "Id:", data$id[1]),
-         subtitle = paste("Start:", sdate, "End:", edate, paste0("(",days), "days)")) 
+         subtitle = paste("Start:", sdate, "End:", edate, paste0("(",days), "days)")) +
+    theme_bw()
   
   return(p)
   
@@ -209,12 +229,12 @@ point_on_land <- function(lon, lat, land = NULL){
   
   # If no landmask provided, get continent map
   if(is.null(land)){
-    land <- map("world", fill = TRUE, plot = FALSE)
-    land <- map2SpatialPolygons(land, IDs=land$names,proj4string=CRS("+proj=longlat +ellps=WGS84"))
+    land <- maps::map("world", fill = TRUE, plot = FALSE)
+    land <- maptools::map2SpatialPolygons(land, IDs=land$names,proj4string=CRS("+proj=longlat +ellps=WGS84"))
   }
   
   # Convert to spatial point
-  xy <- cbind(Longitude,Latitude)
+  xy <- cbind(lon,lat)
   pts <- SpatialPoints(xy, proj4string=land@proj4string)
   
   # Overlay points with continents
@@ -223,6 +243,67 @@ point_on_land <- function(lon, lat, land = NULL){
   
   # Return output
   return(onland)
+}
+
+
+
+diffTimeHisto <- function(data, vline=24){
+  
+  # calculate time difference
+  data$timedif <- timedif(data$date)
+  
+  # plot
+  p <- ggplot(data = data, aes(x=timedif, y = ..count..)) +
+    geom_histogram(breaks = c(0, 2,4,6, 12, 24, 48, 72), fill ="#4271AE") + 
+    scale_x_continuous(name = "Time difference (hours)",
+                       breaks = c(0, 2,4,6, 12, 24, 48, 72),
+                       limits=c(0, 72)) +
+    geom_vline(xintercept = vline, colour="red")+
+    theme_bw()
+  
+  return(p)
+}
+
+
+
+timedif <- function(x){
+  # x       POSIXct class
+  # order time series
+  x <- x[order(x)]
+  
+  # calculate difference between time steps
+  tdif <- c(NA,as.numeric(difftime(x[-1], x[-length(x)], units="hours" )))
+  tdif <- round(tdif, 2)
+  return(tdif)
+}
+
+
+
+
+spt_overlap <- function(abs_cell, abs_date, pres_df, temporal_thrs, grid){
+  # Given a cell number and date for an absence, this function checks the overlap with presences.
+  # For the temporal criteria, it first filter all presence within the temporal threshold (in days).
+  # Then, for the filtered cells, the function checks if they are adhjacent to the target cell.
+  #
+  # absence and presence cell number have to be originated from the same raster (grid)
+  
+  library(dplyr)
+  library(raster)
+  
+  # check if there are presence for a given date, considering temporal window
+  ipres <- dplyr::filter(pres_df, date >= abs_date - temporal_thrs, date <= abs_date + temporal_thrs)
+  if(nrow(ipres)==0) keep <- TRUE
+  
+  # check if there are adjacent cells
+  if(nrow(ipres)>0){
+    adj <- adjacent(grid, cells = as.numeric(abs_cell), directions = 8, pairs = FALSE,
+                    include = TRUE, target = ipres$cell)
+    
+    if(length(adj)==0) keep <- TRUE
+    if(length(adj)>0) keep <- FALSE
+  }
+  
+  return(keep)
 }
 
 

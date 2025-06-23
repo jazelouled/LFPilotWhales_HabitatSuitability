@@ -13,23 +13,6 @@ library(Rtools)
 library(vctrs)
 
 
-install.packages("rlang")
-install.packages("Rtools")
-install.packages("vctrs", dependencies = TRUE)
-
-remove.packages("vctrs")
-
-install.packages("TMB", type = "source")
-
-install.packages("TMB")
-
-# install from my R-universe repository
-install.packages("aniMotum", 
-                 repos = c("https://cloud.r-project.org",
-                           "https://ianjonsen.r-universe.dev"),
-                 dependencies = TRUE)
-
-
 # Main steps are:
 # - Regularize tracks
 
@@ -42,40 +25,22 @@ registerDoParallel(cl)
 #---------------------------------------------------------------
 # 1. Set data repository
 #---------------------------------------------------------------
-indir <- input_data
-outdir <- here::here(output_data, "caret/01tracking/L2_loc_NOinternesting")
-outdir <- here::here(output_data, "caret/01tracking/ForagingUpwelling_filtering")
-
+here()
+indir <- here::here("000inputOutput/00output/00tracking/L1_locations")
+outdir <- here::here("000inputOutput/00output/00tracking/L2_locations")
 if (!dir.exists(outdir)) dir.create(outdir, recursive = TRUE)
+
+
+
 
 #---------------------------------------------------------------
 # 2. Import data
 #---------------------------------------------------------------
 
 # import all location files
-loc_files <- list.files(indir, full.names = TRUE, pattern = "L1_loc.csv")
+loc_files <- list.files(indir, full.names = TRUE, pattern = "L1_locations.csv")
 df <- readTrack(loc_files)
-df$date <- parse_date_time(df$time, orders = c("%d/%m/%Y %H:%M", "%Y-%m-%d %H:%M:%S"))
-
-
-# Deletion of internesting locations (1 month)
-
-# Calculate the number of days from the first observation for each ID
-tracking_data <- df %>%
-    group_by(tripID) %>%
-  mutate(DaysFromStart = as.integer(as.Date(date) - min(as.Date(date))))
-
-# Filter out the first 30 days of data for each individual
-filtered_tracking_data <- tracking_data %>%
-  filter(DaysFromStart > 30)
-
-# Remove the temporary "DaysFromStart" column
-filtered_tracking_data <- select(filtered_tracking_data, -DaysFromStart)
-
-# Print the resulting data frame
-print(filtered_tracking_data)
-
-df <- filtered_tracking_data
+df$Date <- as.POSIXct(df$Date, format = "%Y-%m-%d %H:%M:%S")
 
 
 
@@ -83,28 +48,10 @@ df <- filtered_tracking_data
 # 2. Select trips to run the SSM
 #---------------------------------------------------------------
 
-# summarize data per trip
+# summarize data per trip 
 trips <- summarizeTrips(df)
+tripIDs <- trips$PTT 
 
-# filter trips
-trips <- dplyr::filter(trips,
-                duration_h >= sel_min_dur,
-                n_loc >= sel_min_loc,
-                distance_km >= sel_min_dist, 
-                !tripID %in% sel_exclude)
- 
-
-trips <- dplyr::filter(trips,
-                       duration_h >= sel_min_dur,
-                       n_loc >= sel_min_loc,
-                       distance_km >= sel_min_dist)
-
-
-
-# tripIDs <- trips$tripID
-# deploymentID <- trips$deploymentID
-
-tripIDs <- trips$tripID
 
 
 
@@ -120,31 +67,34 @@ tripIDs <- trips$tripID
 
   # subset data
   # filter by id and selected trips
-  
-  # data <- filter(df, id == i, trip %in% trips$trip)
-  data <- dplyr::filter(df, tripID == tripIDs[i], tripIDs[i] %in% tripIDs)
+    data <- dplyr::filter(df, PTT == tripIDs[i], tripIDs[i] %in% tripIDs)
   
   
   ###### State-Space Model
   
   # convert to foieGras format
-  # if(tag_type == "GPS") indata <- data %>% dplyr::select(organismID, deploymentID, tripID, date, argosLC, longitude, latitude) %>% dplyr::rename(id = deploymentID)
-  if(tag_type == "GPS") indata <- data %>% dplyr::select(organismID, deploymentID, tripID, date, argosLC, longitude, latitude) 
-  indata$id <- indata$tripID
-  # if(tag_type == "PTT") indata <- data %>% dplyr::select(deploymentID, date, argosLC, longitude, latitude, smaj, smin, eor) %>% dplyr::rename(id = deploymentID)
-  
+    if (tag_type == "PTT") {
+      if (any(grepl("Murcia", data$PTT, ignore.case = TRUE))) {
+        indata <- data %>%
+          dplyr::select(PTT, date, lc, Longitude, Latitude) %>%
+          dplyr::rename(id = PTT)
+      } else {
+        indata <- data %>%
+          dplyr::select(PTT, date, Quality, Longitude, Latitude) %>%
+          dplyr::rename(id = PTT)
+      }
+    }  
   # fit SSM
   # we turn sdafilter off because we previously filtered data
   # we run the model with multiple trips at once
-  
-  colnames(indata) <- c("organismID", "deploymentID", "tripID", "date", "lc", "lon", "lat", "id")
+  colnames(indata) <- c("id", "date", "lc", "lon", "lat")
   
   fit <- fit_ssm(indata,
-                 vmax= filt_vmax,
-                 ang = filt_ang,
-                 distlim = filt_distlim,
+                 # vmax= filt_vmax,
+                 # ang = filt_ang,
+                 # distlim = filt_distlim,
                  model = "crw",
-                 time.step = reg_time_step,
+                 time.step = 4,
                  control = ssm_control(verbose = 0))
   
 
@@ -152,21 +102,14 @@ tripIDs <- trips$tripID
   # get fitted locations
   # segments that did not converge were not consider
   data <- data.frame(grab(fit, what = "predicted", as_sf = FALSE))
-  # data <- data %>% rename(trip = deploymentID) %>% arrange(date)
   data <- data %>% arrange(date)
-  # data <- cbind(id = i, data)
-  
   # check if points on land
-  land <- NULL
   data$onland <- point_on_land(lat = data$lat, lon = data$lon, land = land)
-  data$organismID <- indata$organismID[1]
-  data$deploymentID <- indata$deploymentID[1]
-  data$tripID <- indata$tripID[1]
-  
-  
+  data$Date <- data$date
+  data$argosfilter <- NA
   
   # export track data into individual folder at output path
-  outpath <-  paste0(outdir, "/", "filteringEMbc/00L2loc")
+  outpath <-  outdir
   if (!dir.exists(outpath)) dir.create(outpath, recursive = TRUE)
   outfile <- paste0(outpath, "/", tripIDs[i], "_L2_locations.csv")
   write.csv(data, outfile, row.names = FALSE)
@@ -177,6 +120,9 @@ tripIDs <- trips$tripID
   write.csv(convergence, outfile, row.names = FALSE)
   
   # plot figures
+  
+  data$Date <- data$date
+  data$argosfilter <- NA
   p <- mapL1(data = data)
   outfile <- paste0(outpath, "/", tripIDs[i], "_L2_locations.png")
   ggsave(outfile, p, width=30, height=15, units = "cm")

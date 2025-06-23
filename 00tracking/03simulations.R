@@ -17,11 +17,11 @@ library(availability)
 library(stringr)
 library(doParallel)
 
-modelSet <- "neritic"
-modelSet <- "oceanic"
+here()
+indir <- here::here("000inputOutput/00output/00tracking/L2_locations")
+outdir <- here::here("000inputOutput/00output/00tracking/simulations")
+if (!dir.exists(outdir)) dir.create(outdir, recursive = TRUE)
 
-indir <- paste0(here::here("00output/caret/01tracking/01filteringForagingUpwelling/00L2_loc_cut/cutTracks/"), modelSet, "/01cutTripsFinal")
-outdir <- paste0(here::here("00output/caret/01tracking/01filteringForagingUpwelling/00L2_loc_cut/cutTracks/"), modelSet, "/01cutTripsFinal")
 
 
 #------------------------------------------------------------------------------------
@@ -77,7 +77,7 @@ mapSimTracks  <- function (simData, obsData, title = NULL){
               aes_string(x = "lon", y = "lat", group = "simid"),
               size=0.5, alpha=0.5, color="grey70") +
     geom_path(data = obsData,
-              aes_string(x = "lon", y = "lat", group = "tripID"),
+              aes_string(x = "lon", y = "lat", group = "id"),
               size=0.5, alpha=1, color="red1") +
     geom_point(data = data.table::first(obsData),
                aes_string(x = "lon", y = "lat"),
@@ -110,16 +110,9 @@ mapSimTracks  <- function (simData, obsData, title = NULL){
 #---------------------------------------------------------------
 
 # import all location files
-loc_files <- list.files(indir, full.names = TRUE, pattern = "cutTrack.csv")
+loc_files <- list.files(indir, full.names = TRUE, pattern = "L2_locations.csv")
 df <- readTrack(loc_files)
-  
-df <- df %>%
-  dplyr::mutate(dateTime = ifelse(grepl("/", timestamp), dmy_hm(timestamp), ymd_hms(timestamp)))
-
-df$dateTime <- as.POSIXct(df$dateTime, origin = "1970-01-01", tz = "UTC")
-df$date <- as.Date(df$dateTime)
-
-
+df$date <- as.POSIXct(df$date, format = "%d/%m/%Y %H:%M")
 
 
 # import convergence files
@@ -212,12 +205,12 @@ if (!is.null(sim_exclude)) tags <- tags[which(!tags %in% sim_exclude)]
   print(paste("Processing tag", tags[i]))
   
   # import data
-  loc_file <- here::here(indir,paste0(tags[i],"_", "cutTrack.csv"))
+  loc_file <- here::here(indir,paste0(tags[i],"_", "L2_locations.csv"))
  
   data <- readTrack(loc_file)
   
   # # select trips that converged in the SSM
-  trips <- unique(data$tripID)
+  trips <- unique(data$id)
   # sel <- which(trips %in% db$trip[db$converged==TRUE])
   # trips <- trips[sel]
   # 
@@ -230,12 +223,14 @@ if (!is.null(sim_exclude)) tags <- tags[which(!tags %in% sim_exclude)]
   trip_list <- list()
   
   
+  sim_n <- 50
+  
   
   
   for (j in 1:length(trips)) {
     print(trips[j])
     # select data for selected segment
-    d <- dplyr::filter(data, tripID == trips[j])
+    d <- dplyr::filter(data, id == id[j])
 
     # Fit a vector-autoregressive movement model to this filtered track.
     # This model assumes that the x- and y-speeds at time t are a linear function
@@ -267,7 +262,7 @@ if (!is.null(sim_exclude)) tags <- tags[which(!tags %in% sim_exclude)]
       # as well as a location, and so the mask can be made time-varying if required (e.g. dynamically masking out areas covered by sea ice).
       
       
-      simu <- availability::surrogateAR(arfit, xs = d[,c("lon", "lat")], ts = d[,c("timestamp")], point.check = myMask(),
+      simu <- availability::surrogateAR(arfit, xs = d[,c("lon", "lat")], ts = d[,c("date")], point.check = myMask(),
                           fixed = rep(c(TRUE, FALSE, sim_fix_last), c(1, nrow(d) - 2, 1)),
                           partial=FALSE)
       

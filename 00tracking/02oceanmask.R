@@ -72,7 +72,7 @@ indir <- here::here(paste0(output_data, "/caret/01tracking/01filteringForagingUp
 loc_files <- list.files(indir, full.names = TRUE, pattern = "cutTrack.csv")
 ssm <- readTrack(loc_files)
 
-indir <- here::here("000inputOutput/00output/00tracking/L0_locations")
+indir <- here::here("000inputOutput/00output/00tracking/L2_locations/")
 loc_files <- list.files(indir, full.names = TRUE, pattern = "locations.csv")
 ssm <- readTrack(loc_files)
 
@@ -91,10 +91,10 @@ ssm$sID <- 1  # create a single ID for all tracks
 ssm <- dplyr::select(ssm, sID, Longitude, Latitude)
 
 bbox <-ssm %>% 
-  st_as_sf(coords = c("Longitude","Latitude"), crs = 4326) %>% 
+  st_as_sf(coords = c("lon","lat"), crs = 4326) %>% 
   st_bbox()
 
-coordinates(ssm) <- ~ Longitude + Latitude
+coordinates(ssm) <- ~ lon + lat
 proj4string(ssm) <- "+proj=longlat +ellps=WGS84"
 mcpolygon <- mcp(ssm, percent = 100) # MCP use all the positions
 
@@ -125,6 +125,12 @@ if (modelSet == "neritic"){
   } else (
   writeRaster(oceanmask, here::here("00output/caret/00enviro/00terrain/oceanmaskOceanicFiltered.tif"), overwrite=TRUE)
   )
+
+
+
+writeRaster(oceanmask, here::here("000inputOutput/00output/000terrain/oceanmask.tif"), overwrite=TRUE)
+
+
 
 
 # Export MCP as shapefile

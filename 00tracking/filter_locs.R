@@ -15,7 +15,7 @@
 cl <- makeCluster(cores)
 registerDoParallel(cl)
 
-cores <- 2
+cores <- 6
 #---------------------------------------------------------------
 # 1. Set data repository
 #---------------------------------------------------------------
@@ -77,7 +77,7 @@ tags <- unique(trips$PTT)
   # subset data
   # filter by id and selected trips
   data <- filter(df, id == id, trip %in% trips$trip)
-  data$date <- as.POSIXct(data$date, format = "%d/%m/%Y %H:%M")
+  df$date <- as.POSIXct(df$Date, format = "%d/%m/%Y %H:%M")
 
   # get list of trips to process
   trip_list <- unique(df$PTT)
@@ -214,7 +214,7 @@ print("Filtering ready")
 
 
 
-
+library(gridExtrax)
 
 data_list <- list()
 
@@ -225,8 +225,15 @@ for (j in 1:length(trip_list)) {
   jtrip <- trip_list[j]
   sdata <- subset(df, PTT == jtrip)
   
-  # Filter out Z location classes
-  sdata <- filter(sdata, Quality != "Z")
+  # Filter out Z location classes. Whales from Murcia do not have quality indicators. 
+  if (any(sdata$PTT %like% "Murcia")) {
+    # Keep rows where Quality is not "Z" or is NA
+    sdata <- filter(sdata, is.na(Quality) | Quality != "Z")
+  } else {
+    # Keep only rows where Quality is not "Z" (NAs will be removed)
+    sdata <- filter(sdata, Quality != "Z")
+  }
+  
   
   # Remove near-duplicate positions
   sdata <- filter_dup(sdata, step.time = filt_step_time, step.dist = filt_step_dist)
@@ -243,17 +250,9 @@ for (j in 1:length(trip_list)) {
   )
   sdata <- filter(sdata, argosfilter == "not")
   
-  if(filt_land == TRUE){
-    sdata$onland <- point_on_land(lat = sdata$lat, lon = sdata$lon, land = land)
+    sdata$onland <- point_on_land(lat = sdata$lat, lon = sdata$lon)
     sdata <- filter(sdata, onland == FALSE)
-  }
-  
-  
-  
-  # Drop unused columns
-  drop <- c("group", "smaj", "smin", "eor")
-  sdata <- sdata[, !(names(sdata) %in% drop)]
-  
+
   # Combine data from multiple trips
   dataL1 <- rbindlist(data_list)
   
@@ -280,3 +279,4 @@ for (j in 1:length(trip_list)) {
   out_file <- paste0(outdir, "/", j, "_L1_locations.png")
   ggsave(out_file, p, width = 30, height = 15, units = "cm")
 }
+ 
